@@ -1,0 +1,11 @@
+[package]
+name = "abex-staking"
+version = "0.0.1"
+
+[dependencies.Sui]
+git = "https://github.com/MystenLabs/sui.git"
+subdir = "crates/sui-framework/packages/sui-framework"
+rev = "mainnet-v1.11.2"
+
+[addresses]
+abex_staking = "0x0"
