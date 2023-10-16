@@ -29,7 +29,7 @@ module abex_staking::pool {
         id: UID,
         lock_until: u64,
         acc_reward_per_share: u128,
-        staked: Balance<S>,
+        stake: Balance<S>,
     }
 
     // === events ===
@@ -63,13 +63,13 @@ module abex_staking::pool {
 
     struct DepositEvent<phantom S, phantom R> has copy, drop {
         user: address,
-        stake_amount: u64,
+        deposit_amount: u64,
         lock_until: u64,
     }
 
     struct WithdrawEvent<phantom S, phantom R> has copy, drop {
         user: address,
-        unstake_amount: u64,
+        withdraw_amount: u64,
         reward_amount: u64,
     }
 
@@ -237,8 +237,8 @@ module abex_staking::pool {
     ) {
         assert!(pool.enabled, ERR_POOL_INACTIVE);
 
-        let stake_amount = coin::value(&stake);
-        assert!(stake_amount > 0, ERR_INVALID_DEPOSIT_AMOUNT);
+        let deposit_amount = coin::value(&stake);
+        assert!(deposit_amount > 0, ERR_INVALID_DEPOSIT_AMOUNT);
 
         let timestamp = clock::timestamp_ms(clock) / 1000;
         assert!(timestamp < pool.end_time, ERR_ALREADY_ENDED);
@@ -249,16 +249,16 @@ module abex_staking::pool {
             id: object::new(ctx),
             lock_until,
             acc_reward_per_share: pool.acc_reward_per_share,
-            staked: coin::into_balance(stake),
+            stake: coin::into_balance(stake),
         };
-        pool.staked_amount = pool.staked_amount + stake_amount;
+        pool.staked_amount = pool.staked_amount + deposit_amount;
         
         let user = tx_context::sender(ctx);
         transfer::transfer(credential, user);
 
         event::emit(DepositEvent<S, R> {
             user,
-            stake_amount,
+            deposit_amount,
             lock_until,
         })
     }
@@ -267,13 +267,13 @@ module abex_staking::pool {
         pool: &mut Pool<S, R>,
         clock: &Clock,
         credential: &mut Credential<S, R>,
-        unstake_amount: u64,
+        withdraw_amount: u64,
         ctx: &mut TxContext,
     ) {
         assert!(pool.enabled, ERR_POOL_INACTIVE);
 
-        let staked_amount = balance::value(&credential.staked);
-        assert!(staked_amount >= unstake_amount, ERR_INVALID_WITHDRAW_AMOUNT);
+        let staked_amount = balance::value(&credential.stake);
+        assert!(staked_amount >= withdraw_amount, ERR_INVALID_WITHDRAW_AMOUNT);
 
         let timestamp = clock::timestamp_ms(clock) / 1000;
         assert!(timestamp >= math::min(credential.lock_until, pool.end_time), ERR_NOT_UNLOCKED);
@@ -285,8 +285,8 @@ module abex_staking::pool {
         credential.acc_reward_per_share = pool.acc_reward_per_share;
 
         let reward = balance::split(&mut pool.reward, reward_amount);
-        let unstake = balance::split(&mut credential.staked, unstake_amount);
-        pool.staked_amount = pool.staked_amount - unstake_amount;
+        let unstake = balance::split(&mut credential.stake, withdraw_amount);
+        pool.staked_amount = pool.staked_amount - withdraw_amount;
 
         let user = tx_context::sender(ctx);
         pay_from_balance(reward, user, ctx);
@@ -294,7 +294,7 @@ module abex_staking::pool {
 
         event::emit(WithdrawEvent<S, R> {
             user,
-            unstake_amount,
+            withdraw_amount,
             reward_amount,
         })
     }
@@ -303,16 +303,16 @@ module abex_staking::pool {
         credential: Credential<S, R>,
         _ctx: &mut TxContext,
     ) {
-        assert!(balance::value(&credential.staked) == 0, ERR_CAN_NOT_CLEAR_CREDENTIAL);
+        assert!(balance::value(&credential.stake) == 0, ERR_CAN_NOT_CLEAR_CREDENTIAL);
 
         let Credential {
             id,
             lock_until: _,
             acc_reward_per_share: _,
-            staked,
+            stake,
         } = credential;
 
         object::delete(id);
-        balance::destroy_zero(staked);
+        balance::destroy_zero(stake);
     }
 }
