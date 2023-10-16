@@ -1,13 +1,13 @@
 
 module abex_staking::pool {
+    use sui::math;
+    use sui::event;
+    use sui::transfer;
+    use sui::coin::{Self, Coin};
+    use sui::clock::{Self, Clock};
     use sui::object::{Self, ID, UID};
     use sui::balance::{Self, Balance};
-    use sui::coin::{Self, Coin};
-    use sui::tx_context:: {Self, TxContext};
-    use sui::transfer;
-    use sui::event;
-    use sui::math;
-    use sui::clock::{Self, Clock};
+    use sui::tx_context::{Self, TxContext};
 
     use abex_staking::admin::AdminCap;
 
@@ -22,7 +22,7 @@ module abex_staking::pool {
         start_time: u64,
         end_time: u64,
         acc_reward_per_share: u128,
-        locked_duration: u64,
+        lock_duration: u64,
     }
 
     struct Credential<phantom S, phantom R> has key {
@@ -38,7 +38,7 @@ module abex_staking::pool {
         id: ID,
         start_time: u64,
         end_time: u64,
-        locked_duration: u64,
+        lock_duration: u64,
     }
 
     struct SetEnabledEvent<phantom S, phantom R> has copy, drop {
@@ -53,8 +53,8 @@ module abex_staking::pool {
         end_time: u64,
     }
 
-    struct SetLockedDurationEvent<phantom S, phantom R> has copy, drop {
-        locked_duration: u64,
+    struct SetLockDurationEvent<phantom S, phantom R> has copy, drop {
+        lock_duration: u64,
     }
 
     struct AddRewardEvent<phantom S, phantom R> has copy, drop {
@@ -129,7 +129,7 @@ module abex_staking::pool {
         clock: &Clock,
         start_time: u64,
         end_time: u64,
-        locked_duration: u64,
+        lock_duration: u64,
         ctx: &mut TxContext,
     ) {
         let timestamp = clock::timestamp_ms(clock) / 1000;
@@ -148,7 +148,7 @@ module abex_staking::pool {
                 start_time,
                 end_time,
                 acc_reward_per_share: 0,
-                locked_duration,
+                lock_duration,
             }
         );
 
@@ -156,7 +156,7 @@ module abex_staking::pool {
             id,
             start_time,
             end_time,
-            locked_duration,
+            lock_duration,
         })
     }
 
@@ -202,14 +202,14 @@ module abex_staking::pool {
         event::emit(SetEndTimeEvent<S, R> { end_time })
     }
 
-    public entry fun set_locked_duration<S, R>(
+    public entry fun set_lock_duration<S, R>(
         _a: &AdminCap,
         pool: &mut Pool<S, R>,
-        locked_duration: u64,
+        lock_duration: u64,
     ) {
-        pool.locked_duration = locked_duration;
+        pool.lock_duration = lock_duration;
 
-        event::emit(SetLockedDurationEvent<S, R> { locked_duration })
+        event::emit(SetLockDurationEvent<S, R> { lock_duration })
     }
 
     public entry fun add_reward<S, R>(
@@ -245,7 +245,7 @@ module abex_staking::pool {
         assert!(timestamp < pool.end_time, ERR_ALREADY_ENDED);
         refresh_pool(pool, timestamp);
 
-        let lock_until = timestamp + pool.locked_duration;
+        let lock_until = timestamp + pool.lock_duration;
         let credential = Credential<S, R> {
             id: object::new(ctx),
             lock_until,
