@@ -1,14 +1,17 @@
 
 module abex_staking::pool {
-    use sui::object::{Self, UID};
+    use sui::object::{Self, ID, UID};
     use sui::balance::{Self, Balance};
     use sui::coin::{Self, Coin};
     use sui::tx_context:: {Self, TxContext};
     use sui::transfer;
+    use sui::event;
+    use sui::math;
     use sui::clock::{Self, Clock};
 
     use abex_staking::admin::AdminCap;
-    use abex_staking::decimal::{Self, Decimal};
+
+    // === objects ===
 
     struct Pool<phantom S, phantom R> has key {
         id: UID,
@@ -18,16 +21,59 @@ module abex_staking::pool {
         reward: Balance<R>,
         start_time: u64,
         end_time: u64,
-        acc_reward_per_share: Decimal,
+        acc_reward_per_share: u128,
         locked_duration: u64,
     }
 
     struct Credential<phantom S, phantom R> has key {
         id: UID,
         lock_until: u64,
-        acc_reward_per_share: Decimal,
+        acc_reward_per_share: u128,
         staked: Balance<S>,
     }
+
+    // === events ===
+
+    struct CreatePoolEvent<phantom S, phantom R> has copy, drop {
+        id: ID,
+        start_time: u64,
+        end_time: u64,
+        locked_duration: u64,
+    }
+
+    struct SetEnabledEvent<phantom S, phantom R> has copy, drop {
+        enabled: bool,
+    }
+
+    struct SetStartTimeEvent<phantom S, phantom R> has copy, drop {
+        start_time: u64,
+    }
+
+    struct SetEndTimeEvent<phantom S, phantom R> has copy, drop {
+        end_time: u64,
+    }
+
+    struct SetLockedDurationEvent<phantom S, phantom R> has copy, drop {
+        locked_duration: u64,
+    }
+
+    struct AddRewardEvent<phantom S, phantom R> has copy, drop {
+        reward_amount: u64,
+    }
+
+    struct DepositEvent<phantom S, phantom R> has copy, drop {
+        user: address,
+        stake_amount: u64,
+        lock_until: u64,
+    }
+
+    struct WithdrawEvent<phantom S, phantom R> has copy, drop {
+        user: address,
+        unstake_amount: u64,
+        reward_amount: u64,
+    }
+
+    const SCALE_FACTOR: u128 = 1_000_000_000_000_000_000;
 
     const ERR_POOL_INACTIVE: u64 = 0;
     const ERR_INVALID_START_TIME: u64 = 1;
@@ -36,7 +82,10 @@ module abex_staking::pool {
     const ERR_INVALID_REWARD_AMOUNT: u64 = 4;
     const ERR_INVALID_WITHDRAW_AMOUNT: u64 = 5;
     const ERR_NOT_UNLOCKED: u64 = 6;
-    const ERR_CAN_NOT_CLEAR_CREDENTIAL: u64 = 7;
+    const ERR_ALREADY_STARTED: u64 = 7;
+    const ERR_ALREADY_ENDED: u64 = 8;
+    const ERR_CAN_NOT_SET_END_TIME: u64 = 9;
+    const ERR_CAN_NOT_CLEAR_CREDENTIAL: u64 = 10;
 
     fun pay_from_balance<T>(
         balance: Balance<T>,
@@ -66,24 +115,13 @@ module abex_staking::pool {
         if (timestamp > pool.end_time) {
             timestamp = pool.end_time;
         };
-        
-        let reward_amount = decimal::div_by_u64(
-            decimal::mul_with_u64(
-                decimal::from_u64(balance::value(&pool.reward)),
-                timestamp - pool.last_updated_time,
-            ),
-            pool.end_time - pool.last_updated_time,
-        );
-        pool.last_updated_time = timestamp;
 
-        let reward_per_share = decimal::div(
-            reward_amount,
-            decimal::from_u64(pool.staked_amount),
-        );
-        pool.acc_reward_per_share = decimal::add(
-            pool.acc_reward_per_share,
-            reward_per_share,
-        );
+        let reward_amount = (balance::value(&pool.reward) as u128) * (timestamp - pool.last_updated_time as u128)
+            / (pool.end_time - pool.last_updated_time as u128);
+        pool.last_updated_time = timestamp;
+        
+        let reward_per_share = reward_amount * SCALE_FACTOR / (pool.staked_amount as u128);
+        pool.acc_reward_per_share = pool.acc_reward_per_share + reward_per_share;
     }
 
     public entry fun create_pool<S, R>(
@@ -98,19 +136,28 @@ module abex_staking::pool {
         assert!(start_time >= timestamp, ERR_INVALID_START_TIME);
         assert!(end_time > start_time, ERR_INVALID_END_TIME);
         
+        let uid = object::new(ctx);
+        let id = object::uid_to_inner(&uid);
         transfer::share_object(
             Pool<S, R> {
-                id: object::new(ctx),
+                id: uid,
                 enabled: true,
                 last_updated_time: start_time,
                 staked_amount: 0,
                 reward: balance::zero(),
                 start_time,
                 end_time,
-                acc_reward_per_share: decimal::zero(),
+                acc_reward_per_share: 0,
                 locked_duration,
             }
-        )
+        );
+
+        event::emit(CreatePoolEvent<S, R> {
+            id,
+            start_time,
+            end_time,
+            locked_duration,
+        })
     }
 
     public entry fun set_enabled<S, R>(
@@ -119,6 +166,8 @@ module abex_staking::pool {
         enabled: bool,
     ) {
         pool.enabled = enabled;
+
+        event::emit(SetEnabledEvent<S, R> { enabled })
     }
 
     public entry fun set_start_time<S, R>(
@@ -128,11 +177,13 @@ module abex_staking::pool {
         start_time: u64,
     ) {
         let timestamp = clock::timestamp_ms(clock) / 1000;
-        assert!(start_time >= timestamp, ERR_INVALID_START_TIME);
-        assert!(start_time < pool.end_time, ERR_INVALID_START_TIME);
+        assert!(timestamp < pool.start_time, ERR_ALREADY_STARTED);
+        assert!(start_time >= timestamp && start_time < pool.end_time, ERR_INVALID_START_TIME);
 
         refresh_pool(pool, timestamp);
         pool.start_time = start_time;
+
+        event::emit(SetStartTimeEvent<S, R> { start_time })
     }
 
     public entry fun set_end_time<S, R>(
@@ -142,11 +193,13 @@ module abex_staking::pool {
         end_time: u64,
     ) {
         let timestamp = clock::timestamp_ms(clock) / 1000;
-        assert!(end_time > pool.start_time, ERR_INVALID_END_TIME);
-        assert!(end_time > timestamp, ERR_INVALID_END_TIME);
+        assert!(timestamp < pool.end_time, ERR_ALREADY_ENDED);
+        assert!(end_time > timestamp && end_time > pool.start_time, ERR_INVALID_END_TIME);
 
         refresh_pool(pool, timestamp);
         pool.end_time = end_time;
+
+        event::emit(SetEndTimeEvent<S, R> { end_time })
     }
 
     public entry fun set_locked_duration<S, R>(
@@ -155,6 +208,8 @@ module abex_staking::pool {
         locked_duration: u64,
     ) {
         pool.locked_duration = locked_duration;
+
+        event::emit(SetLockedDurationEvent<S, R> { locked_duration })
     }
 
     public entry fun add_reward<S, R>(
@@ -163,11 +218,16 @@ module abex_staking::pool {
         reward: Coin<R>,
         _ctx: &mut TxContext,
     ) {
-        assert!(coin::value(&reward) > 0, ERR_INVALID_REWARD_AMOUNT);
-
         let timestamp = clock::timestamp_ms(clock) / 1000;
+        assert!(timestamp < pool.end_time, ERR_ALREADY_ENDED);
+        
+        let reward_amount = coin::value(&reward);
+        assert!(reward_amount > 0, ERR_INVALID_REWARD_AMOUNT);
+
         refresh_pool(pool, timestamp);
         coin::put(&mut pool.reward, reward);
+
+        event::emit(AddRewardEvent<S, R> { reward_amount })
     }
 
     public entry fun deposit<S, R>(
@@ -177,20 +237,31 @@ module abex_staking::pool {
         ctx: &mut TxContext,
     ) {
         assert!(pool.enabled, ERR_POOL_INACTIVE);
-        assert!(coin::value(&stake) > 0, ERR_INVALID_DEPOSIT_AMOUNT);
+
+        let stake_amount = coin::value(&stake);
+        assert!(stake_amount > 0, ERR_INVALID_DEPOSIT_AMOUNT);
 
         let timestamp = clock::timestamp_ms(clock) / 1000;
+        assert!(timestamp < pool.end_time, ERR_ALREADY_ENDED);
         refresh_pool(pool, timestamp);
 
+        let lock_until = timestamp + pool.locked_duration;
         let credential = Credential<S, R> {
             id: object::new(ctx),
-            lock_until: timestamp + pool.locked_duration,
+            lock_until,
             acc_reward_per_share: pool.acc_reward_per_share,
             staked: coin::into_balance(stake),
         };
-        pool.staked_amount = pool.staked_amount + coin::value(&stake);
+        pool.staked_amount = pool.staked_amount + stake_amount;
         
-        transfer::transfer(credential, tx_context::sender(ctx));
+        let user = tx_context::sender(ctx);
+        transfer::transfer(credential, user);
+
+        event::emit(DepositEvent<S, R> {
+            user,
+            stake_amount,
+            lock_until,
+        })
     }
 
     public entry fun withdraw<S, R>(
@@ -201,38 +272,37 @@ module abex_staking::pool {
         ctx: &mut TxContext,
     ) {
         assert!(pool.enabled, ERR_POOL_INACTIVE);
-        assert!(
-            balance::value(&credential.staked) >= unstake_amount,
-            ERR_INVALID_WITHDRAW_AMOUNT,
-        );
+
+        let staked_amount = balance::value(&credential.staked);
+        assert!(staked_amount >= unstake_amount, ERR_INVALID_WITHDRAW_AMOUNT);
 
         let timestamp = clock::timestamp_ms(clock) / 1000;
-        assert!(timestamp >= credential.lock_until, ERR_NOT_UNLOCKED);
+        assert!(timestamp >= math::min(credential.lock_until, pool.end_time), ERR_NOT_UNLOCKED);
 
         refresh_pool(pool, timestamp);
 
-        let reward_amount = decimal::mul_with_u64(
-            decimal::sub(
-                pool.acc_reward_per_share,
-                credential.acc_reward_per_share,
-            ),
-            balance::value(&credential.staked),
-        );
-        let reward_amount = decimal::floor_u64(reward_amount);
+        let reward_amount = ((pool.acc_reward_per_share - credential.acc_reward_per_share)
+            * (staked_amount as u128) / SCALE_FACTOR as u64);
         credential.acc_reward_per_share = pool.acc_reward_per_share;
 
         let reward = balance::split(&mut pool.reward, reward_amount);
         let unstake = balance::split(&mut credential.staked, unstake_amount);
         pool.staked_amount = pool.staked_amount - unstake_amount;
 
-        let receiver = tx_context::sender(ctx);
-        pay_from_balance(reward, receiver, ctx);
-        pay_from_balance(unstake, receiver, ctx);
+        let user = tx_context::sender(ctx);
+        pay_from_balance(reward, user, ctx);
+        pay_from_balance(unstake, user, ctx);
+
+        event::emit(WithdrawEvent<S, R> {
+            user,
+            unstake_amount,
+            reward_amount,
+        })
     }
 
     public entry fun clear_empty_credential<S, R>(
         credential: Credential<S, R>,
-        ctx: &mut TxContext,
+        _ctx: &mut TxContext,
     ) {
         assert!(balance::value(&credential.staked) == 0, ERR_CAN_NOT_CLEAR_CREDENTIAL);
 
