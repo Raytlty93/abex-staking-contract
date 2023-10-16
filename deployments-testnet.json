@@ -1,12 +1,12 @@
 {
-    "abex_staking": {
-        "package": "",
-        "upgrade_cap": "",
-        "admin_cap": "",
-        "pool": ""
-    },
-    "coin_modules": {
-        "sui": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
-        "alp": "0xceab84acf6bf70f503c3b0627acaff6b3f84cee0f2d7ed53d00fa6c2a168d14f::alp::ALP"
-    }
+  "abex_staking": {
+    "package": "0x41e4d9c97637ca30dce34fcdc7ab80534fb4b89cd5333f3c4bf8e623de649a9f",
+    "upgrade_cap": "0xa87b7f91c8b542003e2206dc5c27008a85b09ac6a17e552b27b25460f264d5a9",
+    "admin_cap": "0x86497c7c3a609eeea28889de898aca4880719b620eaf11a903d8e3b8e5597111",
+    "pool": "0x109e9bcd43ed72fc3f04eba3aa41ee00c6172aa27131afa9f7b144ed85db0c26"
+  },
+  "coin_modules": {
+    "sui": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+    "alp": "0x8049178bb7dd8101bb59c53d8d2b7091b5d917a02dc3f3478ad810402c28bc90::alp::ALP"
+  }
 }

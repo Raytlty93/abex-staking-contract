@@ -14,7 +14,7 @@ fi
 if [ -z "$env_name" ]; then
        env_name="mainnet"
 fi
-deployments="../../deployments-$env_name.json"
+deployments="../deployments-$env_name.json"
 config="/root/.sui/sui_config/$env_name-client.yaml"
 
 if [ -z "${stake_coin}" ]; then
