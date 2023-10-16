@@ -84,8 +84,7 @@ module abex_staking::pool {
     const ERR_NOT_UNLOCKED: u64 = 6;
     const ERR_ALREADY_STARTED: u64 = 7;
     const ERR_ALREADY_ENDED: u64 = 8;
-    const ERR_CAN_NOT_SET_END_TIME: u64 = 9;
-    const ERR_CAN_NOT_CLEAR_CREDENTIAL: u64 = 10;
+    const ERR_CAN_NOT_CLEAR_CREDENTIAL: u64 = 9;
 
     fun pay_from_balance<T>(
         balance: Balance<T>,
