@@ -1,7 +1,7 @@
 [package]
 name = "abex-staking"
 version = "0.0.1"
-published-at = "0x41e4d9c97637ca30dce34fcdc7ab80534fb4b89cd5333f3c4bf8e623de649a9f"
+published-at = "0x0e70921d7cae21b7123f1e0b573cbed5c043db78a40a7dbfd11ac51436c64d10"
 
 [dependencies.Sui]
 git = "https://github.com/MystenLabs/sui.git"
@@ -9,4 +9,4 @@ subdir = "crates/sui-framework/packages/sui-framework"
 rev = "mainnet-v1.11.2"
 
 [addresses]
-abex_staking = "0x41e4d9c97637ca30dce34fcdc7ab80534fb4b89cd5333f3c4bf8e623de649a9f"
+abex_staking = "0x0e70921d7cae21b7123f1e0b573cbed5c043db78a40a7dbfd11ac51436c64d10"
