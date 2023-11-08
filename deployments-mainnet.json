@@ -3,7 +3,7 @@
         "package": "",
         "upgrade_cap": "",
         "admin_cap": "",
-        "pool": ""
+        "pools": []
     },
     "coin_modules": {
         "sui": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
