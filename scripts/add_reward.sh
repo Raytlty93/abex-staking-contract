@@ -4,6 +4,7 @@ read -p "Import the env name (default: mainnet): " env_name
 read -p "Import gas budget (default: 1000000000): " gas_budget
 read -p "Import staking coin name (default alp): " stake_coin
 read -p "Import reward coin name (default sui): " reward_coin
+read -p "Import the pool object: " pool
 read -p "Import reward coin object: " reward_object
 
 if [ -z "$gas_budget" ]; then
@@ -23,7 +24,6 @@ if [ -z "${reward_coin}" ]; then
 fi
 
 package=`cat $deployments | jq -r ".abex_staking.package"`
-pool=`cat $deployments | jq -r ".abex_staking.pool"`
 stake_coin_module=`cat $deployments | jq -r ".coin_modules.${stake_coin}"`
 reward_coin_module=`cat $deployments | jq -r ".coin_modules.${reward_coin}"`
 
