@@ -45,7 +45,8 @@ echo "${create_log}"
 ok=`echo "${create_log}" | grep "Status : Success"`
 if [ -n "$ok" ]; then
        pool=`echo "${create_log}" | grep "$package::pool::Pool" -A 1 | grep objectId | awk -F 'String\\("' '{print $2}' | awk -F '"\\)' '{print $1}'`
-       json_content=`jq ".abex_staking.pools += [\"$pool\"]" $deployments`
+       json_content=`jq ".abex_staking.pool = \"$pool\"" $deployments`
+       json_content=`echo "$json_content" | jq ".abex_staking.pools += [\"$pool\"]"`
 
        if [ -n "$json_content" ]; then
               echo "$json_content" | jq . > $deployments
