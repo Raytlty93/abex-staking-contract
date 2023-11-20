@@ -23,8 +23,8 @@ if [ -z "${reward_coin}" ]; then
 fi
 
 package=`cat $deployments | jq -r ".abex_staking.package"`
-admin_cap=`cat $deployments | jq -r ".abex_staking.admin_cap"
-pool=`cat $deployments | jq -r "abex_staking.pool"`
+admin_cap=`cat $deployments | jq -r ".abex_staking.admin_cap"`
+pool=`cat $deployments | jq -r ".abex_staking.pool"`
 stake_coin_module=`cat $deployments | jq -r ".coin_modules.${stake_coin}"`
 reward_coin_module=`cat $deployments | jq -r ".coin_modules.${reward_coin}"`
 
